@@ -16,7 +16,7 @@ func init() {
 func InithealthCheck() {
 	var FluxServer        []*utils.Flux
 	for {
-		time.Sleep(30 * time.Second)
+		time.Sleep(10 * time.Second)
 		// Perform health check for each backend server
 		for i := range FluxServer {
 			if !CheckHealth(FluxServer[i]) {

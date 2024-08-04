@@ -2,22 +2,18 @@ package main
 
 import (
 	"fmt"
+	"httpFlux/api"
 	"httpFlux/utils"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
-	"sync"
 )
 var (
-	mutex           sync.Mutex
 	FluxServer        []*utils.Flux
-	nextServerIndex = 0
-	CurrentWeight   = 0
-	algos = utils.WeightedRoundRobbin
 ) 
 func main() {
-	cfg, err := utils.FetchFluxConfig("config/config.json")
+	cfg, err := utils.FetchFluxConfig(".././config/config.json")
 	if err != nil {
 		fmt.Println("Error reading config file", err)
 		return
@@ -50,7 +46,7 @@ func main() {
 		}
 		fmt.Println(" Starting Flux servers", FluxServer[i])
 	}
-	//http.HandleFunc("/", handler)
+	http.HandleFunc("/", api.Requesthandler)
 	http.HandleFunc("/check", func(w http.ResponseWriter, r *http.Request) {
 		log.Println("Remote Server status", r.RemoteAddr)
 		fmt.Fprintln(w, "HttpFlux is running successfully OK!!!",)
