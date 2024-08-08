@@ -11,14 +11,30 @@ import (
 	"sync"
 	"time"
 )
-var(
-	algos = utils.WeightedRoundRobbin
+
+var (
+	algos           = utils.WeightedRoundRobbin
 	nextServerIndex = 0
 	CurrentWeight   = 0
-	backends        []*utils.Flux
+	backendServers  []*utils.Flux
+	mutex           sync.Mutex
 )
+
+// CustomTransport wraps around the standard Transport to capture errors
+type CustomTransport struct {
+	Transport http.RoundTripper
+}
+
+func (c *CustomTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := c.Transport.RoundTrip(req)
+	if err != nil {
+		// Log the error and return it
+		fmt.Printf("Proxy request error: %v\n", err)
+	}
+	return resp, err
+}
+
 func Requesthandler(w http.ResponseWriter, r *http.Request) {
-	var mutex sync.Mutex
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -32,36 +48,33 @@ func Requesthandler(w http.ResponseWriter, r *http.Request) {
 	url, _ := url.Parse(backendFlux.URL)
 
 	// Increment the number of connections for the selected backend server
-
 	backendFlux.IncrementConnections()
 
 	// Forward request to selected backend server
-	//the below is used to implemnet the keep alive connection upto 100
 	startTime := time.Now()
 	proxy := httputil.NewSingleHostReverseProxy(url)
-	proxy.Transport = &http.Transport{
-		IdleConnTimeout:     90 * time.Second,
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 100,
-		TLSHandshakeTimeout: 10 * time.Second,
+	proxy.Transport = &CustomTransport{
+		Transport: &http.Transport{
+			IdleConnTimeout:     90 * time.Second,
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100,
+			TLSHandshakeTimeout: 10 * time.Second,
+		},
 	}
 	proxy.ServeHTTP(w, r)
 	backendFlux.ResponseTime = time.Since(startTime)
-	fmt.Println("Response time", backendFlux.ResponseTime)
+	fmt.Println("Response time:", backendFlux.ResponseTime)
 
 	// Decrement the number of connections for the selected backend server
 	defer backendFlux.DecrementConnections()
-
 }
 
-
 func selectHealthyBackend() *utils.Flux {
-	 
 	// Filter out unhealthy backends
 	healthyBackends := make([]*utils.Flux, 0)
-	for i := range backends {
-		if backends[i].Healthy {
-			healthyBackends = append(healthyBackends, backends[i])
+	for _, backend := range backendServers {
+		if backend.Healthy {
+			healthyBackends = append(healthyBackends, backend)
 		}
 	}
 
@@ -77,41 +90,37 @@ func selectHealthyBackend() *utils.Flux {
 		nextServerIndex = scheduler.LeastConnections(healthyBackends)
 		return healthyBackends[nextServerIndex]
 	case utils.WeightedRoundRobbin:
-		// fmt.Println("CurrentWeight is the", CurrentWeight)
 		nextServerIndex, CurrentWeight = scheduler.WeightedRoundRobbin(CurrentWeight, healthyBackends)
 		return healthyBackends[nextServerIndex]
 	case utils.LeastTime:
 		nextServerIndex = scheduler.LeastTime(healthyBackends)
 		return healthyBackends[nextServerIndex]
-
 	default:
 		// Use round-robin as the default algorithm
 		nextServerIndex = scheduler.RoundRobbin(nextServerIndex, healthyBackends)
 		return healthyBackends[nextServerIndex]
-
 	}
-
 }
 
 func healthCheck() {
 	for {
 		time.Sleep(10 * time.Second) // Check health every 10 seconds
 		// Perform health check for each backend server
-		for i := range backends {
-			if !config.CheckHealth(backends[i]) {
+		for _, backend := range backendServers {
+			if !config.CheckHealth(backend) {
 				// Mark backend as unhealthy
-				backends[i].Healthy = false
-				fmt.Printf("Backend %s is unhealthy %d \n", backends[i].URL, backends[i].Connections)
+				backend.Healthy = false
+				fmt.Printf("Backend %s is unhealthy %d\n", backend.URL, backend.Connections)
 			} else {
 				// Mark backend as healthy
-				backends[i].Healthy = true
-				fmt.Printf("Backend %s is healthy %d \n", backends[i].URL, backends[i].Connections)
+				backend.Healthy = true
+				fmt.Printf("Backend %s is healthy %d\n", backend.URL, backend.Connections)
 			}
 		}
 	}
 }
 
-func init() {
-	// Start health check in the background
+func InitBackendServers(servers []*utils.Flux) {
+	backendServers = servers
 	go healthCheck()
 }

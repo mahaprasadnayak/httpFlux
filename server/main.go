@@ -9,13 +9,15 @@ import (
 	"net/http"
 	"net/url"
 )
+
 var (
-	FluxServer        []*utils.Flux
-) 
+	FluxServer []*utils.Flux
+)
+
 func main() {
-	cfg, err := utils.FetchFluxConfig(".././config/config.json")
+	cfg, err := utils.FetchFluxConfig("./config/config.json")
 	if err != nil {
-		fmt.Println("Error reading config file", err)
+		fmt.Println("Error reading config file:", err)
 		return
 	}
 	defer func() {
@@ -30,12 +32,13 @@ func main() {
 		return
 	}
 	_, port, err := net.SplitHostPort(parsedURL.Host)
-	strPort := fmt.Sprintf(":%s", port)
 	if err != nil {
 		fmt.Println("Error parsing port:", err)
 		return
-
 	}
+	strPort := fmt.Sprintf(":%s", port)
+
+	// Initialize FluxServer with the configuration
 	FluxServer = make([]*utils.Flux, len(cfg.Nodes))
 	for i, s := range cfg.Nodes {
 		FluxServer[i] = &utils.Flux{
@@ -44,13 +47,16 @@ func main() {
 			Healthy:     true,
 			Connections: 0,
 		}
-		fmt.Println(" Starting Flux servers", FluxServer[i])
+		fmt.Println("Starting Flux server", FluxServer[i])
 	}
+
+	api.InitBackendServers(FluxServer)
+
 	http.HandleFunc("/", api.Requesthandler)
 	http.HandleFunc("/check", func(w http.ResponseWriter, r *http.Request) {
-		log.Println("Remote Server status", r.RemoteAddr)
-		fmt.Fprintln(w, "HttpFlux is running successfully OK!!!",)
+		log.Println("Remote Server status:", r.RemoteAddr)
+		fmt.Fprintln(w, "HttpFlux is running successfully OK!!!")
 	})
-	fmt.Printf("HttpFlux started on %s", port)
+	fmt.Printf("HttpFlux started on %s\n", strPort)
 	log.Fatal(http.ListenAndServe(strPort, nil))
 }

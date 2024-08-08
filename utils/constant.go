@@ -9,17 +9,17 @@ import (
 )
 
 type FluxConfig struct {
-	Nodes []ServerConfig `json:"nodes"`
-	ProxyUrl   string         `json:"proxy"`
+	Nodes       []ServerConfig `json:"nodes"`
+	ProxyUrl    string         `json:"proxy"`
 }
 
 type ServerConfig struct {
-	NodeURL    string `json:"node_url"`
-	Weight int    `json:"weight"`
+	NodeURL string `json:"node_url"`
+	Weight  int    `json:"weight"`
 }
 
 type Flux struct {
-	URL           string `json:"url"`
+	URL           string        `json:"url"`
 	Healthy       bool
 	Connections   int
 	ResponseTime  time.Duration
@@ -29,10 +29,11 @@ type Flux struct {
 
 func (b *Flux) IncrementConnections() {
 	b.Connections++
-	fmt.Println("Connections increment", b.Connections)
+	fmt.Println("Connections increment:", b.Connections)
 }
+
 func (b *Flux) DecrementConnections() {
-	fmt.Println("Connections decrement", b.Connections)
+	fmt.Println("Connections decrement:", b.Connections)
 	b.Connections--
 }
 
@@ -46,23 +47,15 @@ var (
 func FetchFluxConfig(filename string) (*FluxConfig, error) {
 	jsonFile, err := os.Open(filename)
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
 	defer jsonFile.Close()
 
 	byteValue, _ := ioutil.ReadAll(jsonFile)
 
 	var config FluxConfig
-	json.Unmarshal(byteValue, &config)
-	
-	var Fluxs []Flux
-	for _, server := range config.Nodes {
-		Flux := Flux{
-			URL:     server.NodeURL,
-			Weight:  server.Weight,
-			Healthy: true,
-		}
-		Fluxs = append(Fluxs, Flux)
+	if err := json.Unmarshal(byteValue, &config); err != nil {
+		return nil, err
 	}
 
 	return &config, nil
