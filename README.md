@@ -12,6 +12,7 @@ go  run .\proxy\proxy.go
 go run server.go -p 8081
 go run server.go -p 8082
 go run server.go -p 8083
+cUrl http://localhost:8080 
 
 
 
